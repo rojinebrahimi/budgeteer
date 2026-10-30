@@ -1,7 +1,7 @@
 {
   "name": "budgeteer",
   "description": "Reads your local Codex and Claude Code usage logs and suggests the best moves to cut cost, with dollar estimates.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "author": { "name": "Rojin Ebrahimi", "url": "https://github.com/rojinebrahimi" },
   "homepage": "https://github.com/rojinebrahimi/budgeteer#readme"
 }
