@@ -42,8 +42,9 @@ codex-install: ## install the /budgeteer prompt for Codex
 snapshot: ## local cross-platform release build (needs goreleaser)
 	goreleaser release --snapshot --clean --skip=publish
 
-demo: ## regenerate docs/demo.gif from synthetic logs (needs python3 + Pillow, macOS Menlo font)
+demo: ## regenerate docs/demo.gif and the square LinkedIn cut from synthetic logs (needs python3 + Pillow, macOS Menlo font)
 	python3 scripts/demo/gen.py $(CURDIR)/.demo-home
 	go build -o .demo-home/budgeteer ./cmd/budgeteer
 	python3 scripts/demo/render.py .demo-home/budgeteer .demo-home docs/demo.gif
+	python3 scripts/demo/render.py .demo-home/budgeteer .demo-home docs/demo-linkedin.gif --linkedin
 	rm -rf .demo-home
