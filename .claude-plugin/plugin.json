@@ -1,6 +1,6 @@
 {
   "name": "budgeteer",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Reads your local Claude Code and Codex usage logs and suggests the best moves to cut cost: model downshifts, context compaction, reasoning effort and cache hygiene, with dollar estimates.",
   "author": { "name": "Rojin Ebrahimi", "url": "https://github.com/rojinebrahimi" },
   "homepage": "https://github.com/rojinebrahimi/budgeteer#readme",

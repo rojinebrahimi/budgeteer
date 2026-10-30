@@ -13,7 +13,7 @@
 # All diagnostics go to stderr so the report on stdout stays clean.
 set -eu
 
-VERSION="0.1.1" # keep in sync with .claude-plugin/plugin.json (enforced by a test)
+VERSION="0.1.2" # keep in sync with .claude-plugin/plugin.json (enforced by a test)
 REPO="rojinebrahimi/budgeteer"
 
 log() { printf 'budgeteer: %s\n' "$*" >&2; }
