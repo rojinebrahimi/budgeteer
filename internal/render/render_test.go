@@ -79,6 +79,11 @@ func TestSummaryOmitsAdviceAndTextWraps(t *testing.T) {
 		t.Error("summary output must not contain a SAVINGS section")
 	}
 	b.Reset()
+	Markdown(&b, r, Options{Window: "2d", Plain: true})
+	if strings.Contains(b.String(), "Best moves") || !strings.Contains(b.String(), "### Hotspots") {
+		t.Errorf("markdown summary must drop the advice heading but keep hotspots:\n%s", b.String())
+	}
+	b.Reset()
 	Text(&b, r, Options{Window: "2d", Width: 70})
 	for _, ln := range strings.Split(b.String(), "\n") {
 		if strings.HasPrefix(strings.TrimSpace(ln), "why:") || strings.HasPrefix(strings.TrimSpace(ln), "do:") {

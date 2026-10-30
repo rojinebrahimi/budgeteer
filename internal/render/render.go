@@ -175,9 +175,11 @@ func Markdown(w io.Writer, r *analyze.Result, o Options) {
 		}
 		p("| `%s`%s | %s | %.0f%% |", s.Name, est, Money(s.Cost), s.Share*100)
 	}
-	p("\n### Best moves to cut cost")
+	if !o.Plain {
+		p("\n### Best moves to cut cost")
+	}
 	if o.Plain {
-		p("\n_Summary only. Run `suggest` for recommendations._")
+		// summary: no advice section, and no heading for one
 	} else if len(r.Findings) == 0 {
 		p("\nNothing material to trim in this window.")
 	} else {
