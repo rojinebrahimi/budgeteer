@@ -54,19 +54,26 @@ sha256() {
 
 # 3. release download (skipped quietly if no release exists yet)
 download() {
-  [ -n "$os" ] && [ -n "$arch" ] && command -v curl >/dev/null 2>&1 || return 1
+  if [ -z "$os" ] || [ -z "$arch" ] || ! command -v curl >/dev/null 2>&1; then
+    return 1
+  fi
   asset="budgeteer_${VERSION}_${os}_${arch}.tar.gz"
   base="https://github.com/$REPO/releases/download/v$VERSION"
   curl -fsSL --retry 2 -o "$tmp/$asset" "$base/$asset" 2>/dev/null || return 1
   curl -fsSL --retry 2 -o "$tmp/checksums.txt" "$base/checksums.txt" 2>/dev/null || return 1
   want=$(grep " $asset\$" "$tmp/checksums.txt" | cut -d' ' -f1)
-  [ -n "$want" ] && [ "$(sha256 "$tmp/$asset")" = "$want" ] || { log "checksum mismatch for $asset; refusing it"; return 1; }
+  if [ -z "$want" ] || [ "$(sha256 "$tmp/$asset")" != "$want" ]; then
+    log "checksum mismatch for $asset; refusing it"
+    return 1
+  fi
   tar -xzf "$tmp/$asset" -C "$tmp" budgeteer && mv "$tmp/budgeteer" "$bin"
 }
 
 # 4. build the bundled source
 build() {
-  command -v go >/dev/null 2>&1 && [ -f "$root/go.mod" ] || return 1
+  if ! command -v go >/dev/null 2>&1 || [ ! -f "$root/go.mod" ]; then
+    return 1
+  fi
   log "building from bundled source (first run only)..."
   (cd "$root" && go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$tmp/budgeteer" ./cmd/budgeteer) >&2 &&
     mv "$tmp/budgeteer" "$bin"
