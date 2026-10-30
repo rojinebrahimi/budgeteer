@@ -31,3 +31,11 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Local build output
+/bin/budgeteer
+/dist/
+
+# Local agent tooling state
+/.serena/
+/.claude/autoharness/
