@@ -1,0 +1,89 @@
+#!/bin/sh
+# budgeteer-run: locate or provision the budgeteer binary, then exec it.
+#
+# A Claude Code plugin is just files, but budgeteer is a compiled Go program.
+# This launcher bridges the two. It tries, in order:
+#
+#   1. a `budgeteer` already on PATH           (go install / package manager)
+#   2. a cached binary for this plugin version (every run after the first)
+#   3. the GitHub release for this version     (checksum-verified download)
+#   4. building the Go source bundled in the plugin directory
+#   5. `go install` of the tagged module
+#
+# All diagnostics go to stderr so the report on stdout stays clean.
+set -eu
+
+VERSION="0.1.0" # keep in sync with .claude-plugin/plugin.json (enforced by a test)
+REPO="rojinebrahimi/budgeteer"
+
+log() { printf 'budgeteer: %s\n' "$*" >&2; }
+
+root=$(cd "$(dirname "$0")/.." && pwd)
+cache="${CLAUDE_PLUGIN_DATA:-${XDG_CACHE_HOME:-$HOME/.cache}/budgeteer}/v$VERSION"
+bin="$cache/budgeteer"
+
+# 1. PATH
+if command -v budgeteer >/dev/null 2>&1; then
+  exec budgeteer "$@"
+fi
+
+# 2. cache
+if [ -x "$bin" ]; then
+  exec "$bin" "$@"
+fi
+
+mkdir -p "$cache"
+tmp=$(mktemp -d "$cache/.tmp.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT INT TERM
+
+case "$(uname -s)" in
+  Darwin) os=darwin ;;
+  Linux) os=linux ;;
+  *) os="" ;;
+esac
+case "$(uname -m)" in
+  x86_64 | amd64) arch=amd64 ;;
+  arm64 | aarch64) arch=arm64 ;;
+  *) arch="" ;;
+esac
+
+sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1; fi
+}
+
+# 3. release download (skipped quietly if no release exists yet)
+download() {
+  [ -n "$os" ] && [ -n "$arch" ] && command -v curl >/dev/null 2>&1 || return 1
+  asset="budgeteer_${VERSION}_${os}_${arch}.tar.gz"
+  base="https://github.com/$REPO/releases/download/v$VERSION"
+  curl -fsSL --retry 2 -o "$tmp/$asset" "$base/$asset" 2>/dev/null || return 1
+  curl -fsSL --retry 2 -o "$tmp/checksums.txt" "$base/checksums.txt" 2>/dev/null || return 1
+  want=$(grep " $asset\$" "$tmp/checksums.txt" | cut -d' ' -f1)
+  [ -n "$want" ] && [ "$(sha256 "$tmp/$asset")" = "$want" ] || { log "checksum mismatch for $asset; refusing it"; return 1; }
+  tar -xzf "$tmp/$asset" -C "$tmp" budgeteer && mv "$tmp/budgeteer" "$bin"
+}
+
+# 4. build the bundled source
+build() {
+  command -v go >/dev/null 2>&1 && [ -f "$root/go.mod" ] || return 1
+  log "building from bundled source (first run only)..."
+  (cd "$root" && go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o "$tmp/budgeteer" ./cmd/budgeteer) >&2 &&
+    mv "$tmp/budgeteer" "$bin"
+}
+
+# 5. go install
+install_module() {
+  command -v go >/dev/null 2>&1 || return 1
+  log "installing github.com/$REPO@v$VERSION with go install..."
+  GOBIN="$tmp" go install "github.com/$REPO/cmd/budgeteer@v$VERSION" >&2 && mv "$tmp/budgeteer" "$bin"
+}
+
+if download || build || install_module; then
+  exec "$bin" "$@"
+fi
+
+log "could not find or install the budgeteer binary."
+log "install Go and run:  go install github.com/$REPO/cmd/budgeteer@latest"
+log "or download a release: https://github.com/$REPO/releases"
+exit 127

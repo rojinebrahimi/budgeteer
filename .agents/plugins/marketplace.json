@@ -1,0 +1,16 @@
+{
+  "name": "budgeteer",
+  "description": "Cost-saving advice for Codex and Claude Code, derived from your own usage logs.",
+  "owner": { "name": "Rojin Ebrahimi", "url": "https://github.com/rojinebrahimi" },
+  "plugins": [
+    {
+      "name": "budgeteer",
+      "description": "Suggests the best moves to reduce Codex and Claude Code spend based on what you actually spent.",
+      "source": "./plugins/budgeteer",
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["cost", "budget", "tokens", "usage"]
+    }
+  ]
+}
