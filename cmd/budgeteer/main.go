@@ -38,7 +38,7 @@ Common flags:
   --top N            sessions and hotspots to list (default 5)
   --pricing FILE     JSON price overrides (also $BUDGETEER_PRICING)
   --claude-dir DIR   default ~/.claude        --codex-dir DIR   default ~/.codex
-  --no-color         disable ANSI colour (also honours $NO_COLOR)
+  --no-color         disable ANSI colour (also honours $NO_COLOR; $FORCE_COLOR forces it on)
 `
 
 func main() {
@@ -121,8 +121,10 @@ func run(args []string, out, errw io.Writer) error {
 	}
 
 	ro := render.Options{
+		Plain:  cmd == "summary",
+		Width:  termWidth(),
 		Window: strings.TrimSpace(*since),
-		Color:  !*noColor && os.Getenv("NO_COLOR") == "" && isTTY(out),
+		Color:  !*noColor && os.Getenv("NO_COLOR") == "" && (isTTY(out) || os.Getenv("FORCE_COLOR") != ""),
 		Note: []string{fmt.Sprintf("Read %d files, %d usage lines → %d unique calls (%d duplicate log lines merged).",
 			st.Files, st.Lines, st.Lines-st.Duplicates, st.Duplicates)},
 	}
@@ -168,6 +170,15 @@ func printPrices(w io.Writer, t *pricing.Table) error {
 	}
 	fmt.Fprintln(w, "\nUSD per 1M tokens. Unknown models fall back to a family default and are marked as estimates.")
 	return nil
+}
+
+// termWidth honours $COLUMNS, defaulting to 100 so wrapped text is readable
+// when piped.
+func termWidth() int {
+	if n, err := strconv.Atoi(os.Getenv("COLUMNS")); err == nil && n >= 40 {
+		return min(n, 140)
+	}
+	return 100
 }
 
 func isTTY(w io.Writer) bool {

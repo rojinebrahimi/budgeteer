@@ -17,6 +17,8 @@ type Options struct {
 	Color  bool
 	Window string // human label, e.g. "7d"
 	Note   []string
+	Width  int  // terminal width for word-wrapping text output; 0 = 100
+	Plain  bool // summary mode: omit the savings section entirely
 }
 
 // JSON writes the machine-readable form.
@@ -82,7 +84,9 @@ func Text(w io.Writer, r *analyze.Result, o Options) {
 	p("%s  %s", st.bold("MODELS"), joinSlices(r.ByModel, 4))
 	p("")
 
-	if len(r.Findings) == 0 {
+	if o.Plain {
+		// summary: no advice section at all
+	} else if len(r.Findings) == 0 {
 		p("%s  %s", st.bold("SAVINGS"), "Nothing material to trim — your usage looks efficient for this window.")
 	} else {
 		pct := 100 * r.Expected / r.Total
@@ -92,10 +96,10 @@ func Text(w io.Writer, r *analyze.Result, o Options) {
 			p("%s %s  %s", st.cyan(fmt.Sprintf("%d.", i+1)), st.bold(f.Title), st.dim(f.Scope))
 			p("   %s expected · up to %s · %.0f%% confidence", st.green(Money(f.Expected)), Money(f.Savings), f.Confidence*100)
 			for _, e := range f.Evidence {
-				p("   %s %s", st.dim("why:"), e)
+				wrapped(w, "   "+st.dim("why:")+" ", 8, e, o.Width)
 			}
 			for _, a := range f.Actions {
-				p("   %s %s", st.cyan("do: "), strip(a))
+				wrapped(w, "   "+st.cyan("do: ")+" ", 8, strip(a), o.Width)
 			}
 			p("")
 		}
@@ -172,7 +176,9 @@ func Markdown(w io.Writer, r *analyze.Result, o Options) {
 		p("| `%s`%s | %s | %.0f%% |", s.Name, est, Money(s.Cost), s.Share*100)
 	}
 	p("\n### Best moves to cut cost")
-	if len(r.Findings) == 0 {
+	if o.Plain {
+		p("\n_Summary only. Run `suggest` for recommendations._")
+	} else if len(r.Findings) == 0 {
 		p("\nNothing material to trim in this window.")
 	} else {
 		p("\nExpected savings **%s** (ceiling %s, ≈%.0f%% of spend).", Money(r.Expected), Money(r.Ceiling), 100*r.Expected/r.Total)
@@ -275,6 +281,35 @@ func trunc(s string, n int) string {
 		return s
 	}
 	return "…" + string(r[len(r)-n+1:])
+}
+
+// wrapped prints text word-wrapped to width columns. The first line follows
+// prefix (whose visible width is indent); continuation lines are indented to
+// match, so long sentences stay readable instead of breaking mid-word.
+func wrapped(w io.Writer, prefix string, indent int, text string, width int) {
+	if width <= 0 {
+		width = 100
+	}
+	room := max(width-indent, 30)
+	line, first := "", true
+	flush := func() {
+		if first {
+			fmt.Fprintln(w, prefix+line)
+		} else {
+			fmt.Fprintln(w, strings.Repeat(" ", indent)+line)
+		}
+		line, first = "", false
+	}
+	for _, word := range strings.Fields(text) {
+		if line != "" && len([]rune(line))+1+len([]rune(word)) > room {
+			flush()
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	flush()
 }
 
 // strip removes Markdown backticks for terminal output.

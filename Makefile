@@ -2,7 +2,7 @@
 VERSION ?= $(shell jq -r .version .claude-plugin/plugin.json)
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: help build test cover lint run plugin-validate plugin-install plugin-uninstall codex-install snapshot
+.PHONY: demo help build test cover lint run plugin-validate plugin-install plugin-uninstall codex-install snapshot
 
 help: ## list targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -41,3 +41,9 @@ codex-install: ## install the /budgeteer prompt for Codex
 
 snapshot: ## local cross-platform release build (needs goreleaser)
 	goreleaser release --snapshot --clean --skip=publish
+
+demo: ## regenerate docs/demo.gif from synthetic logs (needs python3 + Pillow, macOS Menlo font)
+	python3 scripts/demo/gen.py $(CURDIR)/.demo-home
+	go build -o .demo-home/budgeteer ./cmd/budgeteer
+	python3 scripts/demo/render.py .demo-home/budgeteer .demo-home docs/demo.gif
+	rm -rf .demo-home

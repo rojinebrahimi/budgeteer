@@ -39,3 +39,4 @@ go.work.sum
 # Local agent tooling state
 /.serena/
 /.claude/autoharness/
+/.demo-home/

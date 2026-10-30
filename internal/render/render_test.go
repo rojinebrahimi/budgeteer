@@ -70,3 +70,21 @@ func TestHelpers(t *testing.T) {
 		t.Errorf("Spark = %q", s)
 	}
 }
+
+func TestSummaryOmitsAdviceAndTextWraps(t *testing.T) {
+	r := sample()
+	var b bytes.Buffer
+	Text(&b, r, Options{Window: "2d", Plain: true})
+	if strings.Contains(b.String(), "SAVINGS") {
+		t.Error("summary output must not contain a SAVINGS section")
+	}
+	b.Reset()
+	Text(&b, r, Options{Window: "2d", Width: 70})
+	for _, ln := range strings.Split(b.String(), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(ln), "why:") || strings.HasPrefix(strings.TrimSpace(ln), "do:") {
+			if n := len([]rune(ln)); n > 70 {
+				t.Errorf("line exceeds width 70 (%d): %q", n, ln)
+			}
+		}
+	}
+}

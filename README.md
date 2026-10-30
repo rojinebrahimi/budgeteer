@@ -4,6 +4,14 @@
 
 budgeteer reads the session logs your agents already write to disk, prices every API call, and tells you which habit changes would save the most money, ranked, with dollar estimates and the exact setting or command to change. It runs entirely on your machine, makes no network calls, and ships three ways: a standalone Go CLI, a Claude Code plugin (`/budgeteer:suggest`), and a Codex custom prompt.
 
+<p align="center">
+  <img src="docs/demo.gif" alt="budgeteer running summary and suggest on a sample workload" width="860">
+</p>
+
+<sub>The recording is the real binary run on anonymised, synthetic logs (`make demo` regenerates it).</sub>
+
+Plain-text version of the same report:
+
 ```text
 budgeteer  last 7d · Oct 23 → Oct 30
 
@@ -29,7 +37,7 @@ SAVINGS  $41.60 expected · (ceiling $93.10, ~23% of spend)
    …
 ```
 
-> The numbers above are illustrative. Run it on your own logs to see yours.
+> Numbers are illustrative. Run it on your own logs to see yours.
 
 ---
 
@@ -87,7 +95,7 @@ budgeteer prices                   # the price table in effect
 | `--top` | Hotspot sessions to list | `5` |
 | `--pricing` | JSON file with price overrides (or `$BUDGETEER_PRICING`) | built-in |
 | `--claude-dir`, `--codex-dir` | Log locations | `~/.claude`, `~/.codex` |
-| `--no-color` | Disable ANSI colour (also honours `$NO_COLOR`) | auto |
+| `--no-color` | Disable ANSI colour (honours `$NO_COLOR`; `$FORCE_COLOR` forces it on when piped) | auto |
 
 "Last spent" is the `--since` window; budgeteer also loads the equally long window before it so it can show the change versus the previous period.
 
