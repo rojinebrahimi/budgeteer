@@ -19,6 +19,7 @@ type Options struct {
 	Note   []string
 	Width  int  // terminal width for word-wrapping text output; 0 = 100
 	Plain  bool // summary mode: omit the savings section entirely
+	Max    int  // recommendations to show; 0 = all
 }
 
 // JSON writes the machine-readable form.
@@ -45,12 +46,18 @@ func (s style) cyan(t string) string  { return s.wrap("36", t) }
 // Text renders the terminal report.
 func Text(w io.Writer, r *analyze.Result, o Options) {
 	st := style{o.Color}
+	width := o.Width
+	if width <= 0 {
+		width = 100
+	}
 	p := func(f string, a ...any) { fmt.Fprintf(w, f+"\n", a...) }
 
-	p("%s  %s", st.bold("budgeteer"), st.dim(fmt.Sprintf("last %s · %s → %s", o.Window, r.From.Format("Jan 02"), r.To.Format("Jan 02"))))
 	p("")
+	p(" %s  %s", st.bold(st.cyan("budgeteer")), st.dim(fmt.Sprintf("last %s · %s → %s", o.Window, r.From.Format("Jan 02"), r.To.Format("Jan 02"))))
+	p(" %s", st.dim(strings.Repeat("─", min(width, 100)-1)))
 	if r.Total == 0 {
-		p("No usage found in this window. Check --claude-dir / --codex-dir or widen --since.")
+		p("")
+		p(" No usage found in this window. Check --claude-dir / --codex-dir or widen --since.")
 		return
 	}
 
@@ -63,79 +70,153 @@ func Text(w io.Writer, r *analyze.Result, o Options) {
 		case d < -5:
 			delta = st.green(fmt.Sprintf("▼ %+.0f%% vs previous %s", d, o.Window))
 		default:
-			delta = st.dim(fmt.Sprintf("≈ flat vs previous %s", o.Window))
+			delta = st.dim(fmt.Sprintf("● flat vs previous %s", o.Window))
 		}
 	}
-	p("%s  %s   %s", st.bold("SPEND"), st.bold(Money(r.Total)), delta)
-	p("  %s", joinSlices(r.ByTool, 3))
-	p("  %s  %s", Spark(r.Days), st.dim("daily"))
-	p("  %s", st.dim(fmt.Sprintf("%d sessions · %d calls · cache hit %.0f%% · out %s tok (%s reasoning)",
-		r.Sessions, r.Tokens.Calls, r.Tokens.CacheHitRate*100, Tok(r.Tokens.Output), Tok(r.Tokens.Reasoning))))
-	run := fmt.Sprintf("  run-rate ≈ %s/mo", Money(r.Forecast.MonthlyRate))
+	p("")
+	p(" %s  %s  %s", st.bold("SPEND"), st.bold(Money(r.Total)), delta)
+	run := fmt.Sprintf("run-rate ≈ %s/mo", Money(r.Forecast.MonthlyRate))
 	if r.Forecast.Budget > 0 {
 		if r.Forecast.OverBudget {
-			run += st.red(fmt.Sprintf("  — over your %s budget", Money(r.Forecast.Budget)))
+			run += "  " + st.red(fmt.Sprintf("● over your %s budget", Money(r.Forecast.Budget)))
 		} else {
-			run += st.green(fmt.Sprintf("  — within your %s budget", Money(r.Forecast.Budget)))
+			run += "  " + st.green(fmt.Sprintf("● within your %s budget", Money(r.Forecast.Budget)))
 		}
 	}
-	p("%s", run)
+	p("   %s", st.dim(run))
 	p("")
-	p("%s  %s", st.bold("MODELS"), joinSlices(r.ByModel, 4))
+	for _, s := range r.ByTool {
+		p("   %-9s %s %8s %s", s.Name, bar(st, s.Share, 24), Money(s.Cost), st.dim(fmt.Sprintf("%3.0f%%", s.Share*100)))
+	}
 	p("")
+	p("   %-9s %s", "daily", st.cyan(Spark(r.Days)))
+	p("   %s", st.dim(fmt.Sprintf("%s sessions · %s calls · cache hit %.0f%% · %s output tokens (%s reasoning)",
+		Num(r.Sessions), Num(r.Tokens.Calls), r.Tokens.CacheHitRate*100, Tok(r.Tokens.Output), Tok(r.Tokens.Reasoning))))
 
-	if o.Plain {
-		// summary: no advice section at all
-	} else if len(r.Findings) == 0 {
-		p("%s  %s", st.bold("SAVINGS"), "Nothing material to trim — your usage looks efficient for this window.")
-	} else {
-		pct := 100 * r.Expected / r.Total
-		p("%s  %s expected %s (ceiling %s, ~%.0f%% of spend)", st.bold("SAVINGS"), st.green(Money(r.Expected)), st.dim("·"), Money(r.Ceiling), pct)
+	p("")
+	p(" %s", st.bold("MODELS"))
+	for i, s := range r.ByModel {
+		if i == 4 {
+			p("   %s", st.dim(fmt.Sprintf("+%d more", len(r.ByModel)-4)))
+			break
+		}
+		name := trunc(s.Name, 24)
+		if s.Estimate {
+			name += "*"
+		}
+		p("   %-26s %s %8s %s", name, bar(st, s.Share, 18), Money(s.Cost), st.dim(fmt.Sprintf("%3.0f%%", s.Share*100)))
+	}
+
+	if !o.Plain {
 		p("")
-		for i, f := range r.Findings {
-			p("%s %s  %s", st.cyan(fmt.Sprintf("%d.", i+1)), st.bold(f.Title), st.dim(f.Scope))
-			p("   %s expected · up to %s · %.0f%% confidence", st.green(Money(f.Expected)), Money(f.Savings), f.Confidence*100)
-			for _, e := range f.Evidence {
-				wrapped(w, "   "+st.dim("why:")+" ", 8, e, o.Width)
+		if len(r.Findings) == 0 {
+			p(" %s  %s", st.bold("SAVINGS"), "Nothing material to trim, your usage looks efficient for this window.")
+		} else {
+			pct := 100 * r.Expected / r.Total
+			p(" %s  %s expected  %s", st.bold("SAVINGS"), st.green(st.bold(Money(r.Expected))),
+				st.dim(fmt.Sprintf("(up to %s · ≈%.0f%% of spend)", Money(r.Ceiling), pct)))
+			shown, hidden := cut(r.Findings, o.Max)
+			for i, f := range shown {
+				p("")
+				p("  %s  %s", st.cyan(st.bold(fmt.Sprintf("%d", i+1))), st.bold(f.Title))
+				p("     %s", st.dim(f.Scope))
+				p("     %s %s   %s   %s", st.dim("saves"), st.green(st.bold("≈ "+Money(f.Expected))),
+					st.dim("up to "+Money(f.Savings)), dots(st, f.Confidence))
+				for _, e := range f.Evidence {
+					wrapped(w, "     "+st.dim("why")+"  ", 10, e, width)
+				}
+				for _, a := range f.Actions {
+					wrapped(w, "     "+st.cyan("do")+"   ", 10, strip(a), width)
+				}
 			}
-			for _, a := range f.Actions {
-				wrapped(w, "   "+st.cyan("do: ")+" ", 8, strip(a), o.Width)
+			if hidden > 0 {
+				p("")
+				p("     %s", st.dim(fmt.Sprintf("+ %d smaller moves not shown (≈%s expected). Use --top N to see more.", hidden, Money(r.Expected-sumExpected(shown)))))
 			}
-			p("")
 		}
 	}
 
 	if len(r.Top) > 0 {
-		p("%s  %s", st.bold("HOTSPOTS"), st.dim(fmt.Sprintf("top 10%% of sessions = %.0f%% of spend", r.TopDecile*100)))
+		p("")
+		p(" %s  %s", st.bold("HOTSPOTS"), st.dim(fmt.Sprintf("top 10%% of sessions = %.0f%% of spend", r.TopDecile*100)))
+		p("   %s", st.dim(fmt.Sprintf("%8s %5s  %-7s %-20s %6s %6s %9s", "cost", "share", "tool", "model", "calls", "span", "peak ctx")))
 		for _, s := range r.Top {
 			flag := ""
 			if s.Outlier {
-				flag = st.red(" outlier")
+				flag = " " + st.red("⚑")
 			}
-			sub := ""
+			who := string(s.Tool)
 			if s.Subagent {
-				sub = " (subagent)"
+				who += "·sub"
 			}
-			p("  %8s %4.0f%%  %-6s %-22s %4d calls %s peak ctx %s%s%s",
-				Money(s.Cost), s.Share*100, s.Tool, trunc(s.Model, 22), s.Turns, Dur(s.Duration), Tok(s.MaxContext), sub, flag)
-			p("           %s", st.dim(trunc(s.Project, 70)))
+			p("   %8s %4.0f%%  %-7s %-20s %6s %6s %9s%s", Money(s.Cost), s.Share*100, who, trunc(s.Model, 20), Num(s.Turns), Dur(s.Duration), Tok(s.MaxContext), flag)
+			p("            %s %s", st.dim("└"), st.dim(trunc(s.Project, 70)))
 		}
-		p("")
 	}
+	p("")
 	notes(w, r, st, o)
 }
 
+// cut returns the first max findings (all when max <= 0) and how many were dropped.
+func cut(fs []analyze.Finding, max int) ([]analyze.Finding, int) {
+	if max <= 0 || len(fs) <= max {
+		return fs, 0
+	}
+	return fs[:max], len(fs) - max
+}
+
+func sumExpected(fs []analyze.Finding) float64 {
+	var t float64
+	for _, f := range fs {
+		t += f.Expected
+	}
+	return t
+}
+
+// bar draws a share as a filled/empty block gauge of fixed width.
+func bar(st style, share float64, width int) string {
+	n := int(math.Round(share * float64(width)))
+	if share > 0 && n == 0 {
+		n = 1
+	}
+	n = min(n, width)
+	return st.cyan(strings.Repeat("█", n)) + st.dim(strings.Repeat("░", width-n))
+}
+
+// dots renders confidence as five pips plus the percentage.
+func dots(st style, conf float64) string {
+	n := int(math.Round(conf * 5))
+	return st.cyan(strings.Repeat("●", n)) + st.dim(strings.Repeat("○", 5-n)) + st.dim(fmt.Sprintf(" %.0f%% confidence", conf*100))
+}
+
+// Num formats an integer with thousands separators.
+func Num(n int) string {
+	s := fmt.Sprintf("%d", n)
+	for i := len(s) - 3; i > 0; i -= 3 {
+		s = s[:i] + "," + s[i:]
+	}
+	return s
+}
+
 func notes(w io.Writer, r *analyze.Result, st style, o Options) {
-	p := func(f string, a ...any) { fmt.Fprintf(w, f+"\n", a...) }
-	p("%s", st.dim("Costs are API-list-price equivalents from local logs; subscription plans (Pro/Max/Plus) are not billed per token."))
+	width := o.Width
+	if width <= 0 {
+		width = 100
+	}
+	say := func(text string) {
+		for _, ln := range wrapLines(text, width-2) {
+			fmt.Fprintf(w, " %s\n", st.dim(ln))
+		}
+	}
+	say("Costs are API-list-price equivalents from local logs; subscription plans (Pro/Max/Plus) are not billed per token.")
 	if len(r.Estimated) > 0 {
-		p("%s", st.dim("Estimated rates (unknown model → family default): "+strings.Join(r.Estimated, ", ")+". Override with --pricing."))
+		say("* Estimated rate (unknown model → family default): " + strings.Join(r.Estimated, ", ") + ". Override with --pricing.")
 	}
 	if len(r.Unpriced) > 0 {
-		p("%s", st.dim("Not priced (no rate known): "+strings.Join(r.Unpriced, ", ")))
+		say("Not priced (no rate known): " + strings.Join(r.Unpriced, ", "))
 	}
 	for _, n := range o.Note {
-		p("%s", st.dim(n))
+		say(n)
 	}
 }
 
@@ -184,7 +265,8 @@ func Markdown(w io.Writer, r *analyze.Result, o Options) {
 		p("\nNothing material to trim in this window.")
 	} else {
 		p("\nExpected savings **%s** (ceiling %s, ≈%.0f%% of spend).", Money(r.Expected), Money(r.Ceiling), 100*r.Expected/r.Total)
-		for i, f := range r.Findings {
+		shown, hidden := cut(r.Findings, o.Max)
+		for i, f := range shown {
 			p("\n**%d. %s** — %s\n- Saves ≈ **%s** (up to %s, %.0f%% confidence)", i+1, f.Title, f.Scope, Money(f.Expected), Money(f.Savings), f.Confidence*100)
 			for _, e := range f.Evidence {
 				p("- Why: %s", e)
@@ -192,6 +274,9 @@ func Markdown(w io.Writer, r *analyze.Result, o Options) {
 			for _, a := range f.Actions {
 				p("- Do: %s", a)
 			}
+		}
+		if hidden > 0 {
+			p("\n_+ %d smaller moves not shown. Use `--top N` to see more._", hidden)
 		}
 	}
 	p("\n### Hotspots (top 10%% of sessions = %.0f%% of spend)\n\n| Cost | Tool | Model | Calls | Peak ctx | Project |\n|---:|---|---|---:|---:|---|", r.TopDecile*100)
@@ -206,16 +291,12 @@ func Markdown(w io.Writer, r *analyze.Result, o Options) {
 
 // ---------------------------------------------------------------- helpers
 
-// Money formats USD with precision proportional to size.
+// Money formats USD: two decimals, thousands separators from $1,000 up.
 func Money(v float64) string {
-	switch {
-	case v >= 1000:
-		return fmt.Sprintf("$%.0f", v)
-	case v >= 100:
-		return fmt.Sprintf("$%.1f", v)
-	default:
-		return fmt.Sprintf("$%.2f", v)
+	if v >= 1000 {
+		return "$" + Num(int(math.Round(v)))
 	}
+	return fmt.Sprintf("$%.2f", v)
 }
 
 // Tok formats a token count with k/M/B suffixes.
@@ -285,6 +366,23 @@ func trunc(s string, n int) string {
 	return "…" + string(r[len(r)-n+1:])
 }
 
+// wrapLines word-wraps text into lines of at most room runes.
+func wrapLines(text string, room int) []string {
+	var out []string
+	line := ""
+	for _, word := range strings.Fields(text) {
+		if line != "" && len([]rune(line))+1+len([]rune(word)) > room {
+			out = append(out, line)
+			line = ""
+		}
+		if line != "" {
+			line += " "
+		}
+		line += word
+	}
+	return append(out, line)
+}
+
 // wrapped prints text word-wrapped to width columns. The first line follows
 // prefix (whose visible width is indent); continuation lines are indented to
 // match, so long sentences stay readable instead of breaking mid-word.
@@ -292,26 +390,13 @@ func wrapped(w io.Writer, prefix string, indent int, text string, width int) {
 	if width <= 0 {
 		width = 100
 	}
-	room := max(width-indent, 30)
-	line, first := "", true
-	flush := func() {
-		if first {
-			fmt.Fprintln(w, prefix+line)
+	for i, ln := range wrapLines(text, max(width-indent, 30)) {
+		if i == 0 {
+			fmt.Fprintln(w, prefix+ln)
 		} else {
-			fmt.Fprintln(w, strings.Repeat(" ", indent)+line)
+			fmt.Fprintln(w, strings.Repeat(" ", indent)+ln)
 		}
-		line, first = "", false
 	}
-	for _, word := range strings.Fields(text) {
-		if line != "" && len([]rune(line))+1+len([]rune(word)) > room {
-			flush()
-		}
-		if line != "" {
-			line += " "
-		}
-		line += word
-	}
-	flush()
 }
 
 // strip removes Markdown backticks for terminal output.

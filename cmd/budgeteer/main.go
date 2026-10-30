@@ -35,7 +35,7 @@ Common flags:
   --tool NAME        all (default), claude, or codex
   --format FORMAT    text (default), markdown, or json
   --budget USD       monthly budget; flags when the run-rate exceeds it
-  --top N            sessions and hotspots to list (default 5)
+  --top N            recommendations and hotspot sessions to list (default 5)
   --pricing FILE     JSON price overrides (also $BUDGETEER_PRICING)
   --claude-dir DIR   default ~/.claude        --codex-dir DIR   default ~/.codex
   --no-color         disable ANSI colour (also honours $NO_COLOR; $FORCE_COLOR forces it on)
@@ -122,6 +122,7 @@ func run(args []string, out, errw io.Writer) error {
 
 	ro := render.Options{
 		Plain:  cmd == "summary",
+		Max:    *top,
 		Width:  termWidth(),
 		Window: strings.TrimSpace(*since),
 		Color:  !*noColor && os.Getenv("NO_COLOR") == "" && (isTTY(out) || os.Getenv("FORCE_COLOR") != ""),

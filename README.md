@@ -8,7 +8,7 @@ budgeteer reads the session logs your agents already write to disk, prices every
   <img src="docs/demo.gif" alt="budgeteer running summary and suggest on a sample workload" width="860">
 </p>
 
-<sub>The recording is the real binary run on anonymised, synthetic logs (`make demo` regenerates it).</sub>
+<sub>The recording is the real binary run on anonymised, synthetic logs. `make demo` regenerates it, plus a square 1080×1080 cut for social posts (`docs/demo-linkedin.gif`).</sub>
 
 Plain-text version of the same report:
 
@@ -92,7 +92,7 @@ budgeteer prices                   # the price table in effect
 | `--tool` | `all`, `claude` or `codex` | `all` |
 | `--format` | `text`, `markdown` or `json` | `text` |
 | `--budget` | Monthly budget in USD; reports whether the run-rate exceeds it | off |
-| `--top` | Hotspot sessions to list | `5` |
+| `--top` | Recommendations and hotspot sessions to list | `5` |
 | `--pricing` | JSON file with price overrides (or `$BUDGETEER_PRICING`) | built-in |
 | `--claude-dir`, `--codex-dir` | Log locations | `~/.claude`, `~/.codex` |
 | `--no-color` | Disable ANSI colour (honours `$NO_COLOR`; `$FORCE_COLOR` forces it on when piped) | auto |

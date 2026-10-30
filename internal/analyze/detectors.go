@@ -43,6 +43,28 @@ func usd(v float64) string {
 	return fmt.Sprintf("$%.2f", v)
 }
 
+// plural returns "1 call" / "2 calls".
+func plural(n int, noun string) string {
+	if n == 1 {
+		return fmt.Sprintf("1 %s", noun)
+	}
+	return fmt.Sprintf("%d %ss", n, noun)
+}
+
+func effortNote(high, calls int) string {
+	if high == calls {
+		return "all at high effort"
+	}
+	return fmt.Sprintf("%d at high effort", high)
+}
+
+func fallVerb(n int) string {
+	if n == 1 {
+		return "falls"
+	}
+	return "fall"
+}
+
 func alias(id string) string {
 	for _, a := range []string{"opus", "sonnet", "haiku"} {
 		if strings.Contains(id, a) {
@@ -65,7 +87,7 @@ func topExamples(ex []example, n int) string {
 		if i == n {
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s (%d calls, −%s)", x.name, x.turns, usd(x.saved)))
+		parts = append(parts, fmt.Sprintf("%s (%s, −%s)", x.name, plural(x.turns, "call"), usd(x.saved)))
 	}
 	return strings.Join(parts, "; ")
 }
@@ -189,11 +211,11 @@ func detectDownshift(e *env) []Finding {
 		f := Finding{
 			ID:       "model-downshift",
 			Title:    fmt.Sprintf("Use %s instead of %s for light work", cheap, alias(g.model.ID)),
-			Scope:    fmt.Sprintf("%s · %s · %d sessions", g.tool, ran, g.sessions),
+			Scope:    fmt.Sprintf("%s · %s · %s", g.tool, ran, plural(g.sessions, "session")),
 			Savings:  g.saved,
 			Expected: g.expected,
 			Evidence: []string{
-				fmt.Sprintf("%d sessions on %s fall in the lightest 40%% of your own work (short outputs, little reasoning).", g.sessions, ran),
+				fmt.Sprintf("%s on %s %s in the lightest 40%% of your own work (short outputs, little reasoning).", plural(g.sessions, "session"), ran, fallVerb(g.sessions)),
 				fmt.Sprintf("Re-pricing the same tokens at %s rates (+15%% token allowance) saves up to %s.", g.cheaper.ID, usd(g.saved)),
 				"Largest: " + topExamples(g.ex, 3),
 			},
@@ -280,12 +302,12 @@ func detectReasoning(e *env) []Finding {
 		f := Finding{
 			ID:       "reasoning-effort",
 			Title:    "Lower reasoning effort for routine work",
-			Scope:    fmt.Sprintf("%s · %d calls", tool, a.calls),
+			Scope:    fmt.Sprintf("%s · %s", tool, plural(a.calls, "call")),
 			Savings:  a.saved,
 			Expected: a.expected,
 			Evidence: []string{
-				fmt.Sprintf("Reasoning tokens cost %s across %d calls (%d at high effort); they are billed at the output rate.", usd(a.cost), a.calls, a.high),
-				"Dropping one effort level typically removes 25–35% of reasoning tokens with little quality loss on routine edits.",
+				fmt.Sprintf("Reasoning tokens cost %s over %s (%s), billed as output.", usd(a.cost), plural(a.calls, "call"), effortNote(a.high, a.calls)),
+				"One effort level lower typically trims 25–35% of reasoning tokens on routine edits.",
 			},
 		}
 		f.Confidence = f.Expected / f.Savings
@@ -361,11 +383,11 @@ func detectContextBloat(e *env) []Finding {
 		f := Finding{
 			ID:       "context-bloat",
 			Title:    "Compact or restart before the context balloons",
-			Scope:    fmt.Sprintf("%s · %d sessions", tool, len(a.sessions)),
+			Scope:    fmt.Sprintf("%s · %s", tool, plural(len(a.sessions), "session")),
 			Savings:  a.saved,
 			Expected: a.saved * 0.55,
 			Evidence: []string{
-				fmt.Sprintf("%d calls carried over %dk tokens of context (peak %dk); every call re-reads all of it.", a.calls, e.cfg.ContextCeiling/1000, a.peak/1000),
+				fmt.Sprintf("%s carried over %dk tokens of context (peak %dk), re-read on every turn.", plural(a.calls, "call"), e.cfg.ContextCeiling/1000, a.peak/1000),
 				fmt.Sprintf("Reading the portion above %dk cost about %s.", e.cfg.ContextTarget/1000, usd(a.excess)),
 				"Worst: " + topExamples(ex, 3),
 			},
@@ -440,13 +462,13 @@ func detectCacheRebuild(e *env) []Finding {
 		f := Finding{
 			ID:         "cache-rebuild",
 			Title:      "Avoid resuming after the prompt cache expires",
-			Scope:      fmt.Sprintf("%s · %d rebuilds", tool, a.n),
+			Scope:      fmt.Sprintf("%s · %s", tool, plural(a.n, "rebuild")),
 			Savings:    a.saved,
 			Expected:   a.saved * 0.5,
 			Confidence: 0.5,
 			Evidence: []string{
-				fmt.Sprintf("%d times the whole context was re-written to cache after an idle gap (avg %.0f min).", a.n, a.gap/float64(a.n)),
-				"A cache write costs 1.25–2× normal input; a cache read costs ~0.1×.",
+				fmt.Sprintf("The whole context was re-written to cache %d× after idle gaps (avg %.0f min).", a.n, a.gap/float64(a.n)),
+				"A cache write costs 1.25–2× normal input; a read costs ~0.1×.",
 				"Worst: " + topExamples(a.ex, 3),
 			},
 			Actions: []string{

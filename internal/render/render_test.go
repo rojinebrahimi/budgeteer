@@ -28,7 +28,7 @@ func TestTextAndMarkdownSections(t *testing.T) {
 	var txt, md bytes.Buffer
 	Text(&txt, r, Options{Window: "2d"})
 	Markdown(&md, r, Options{Window: "2d"})
-	for _, want := range []string{"SPEND", "MODELS", "HOTSPOTS", "API-list-price"} {
+	for _, want := range []string{"SPEND", "MODELS", "HOTSPOTS", "API-list-price", "█", "confidence"} {
 		if !strings.Contains(txt.String(), want) {
 			t.Errorf("text output missing %q", want)
 		}
@@ -60,7 +60,7 @@ func TestJSONRoundTrips(t *testing.T) {
 }
 
 func TestHelpers(t *testing.T) {
-	if Money(0.5) != "$0.50" || Money(1234.5) != "$1234" {
+	if Money(0.5) != "$0.50" || Money(1234.5) != "$1,235" {
 		t.Errorf("Money: %s %s", Money(0.5), Money(1234.5))
 	}
 	if Tok(1_500_000) != "1.5M" || Tok(999) != "999" {
@@ -86,10 +86,33 @@ func TestSummaryOmitsAdviceAndTextWraps(t *testing.T) {
 	b.Reset()
 	Text(&b, r, Options{Window: "2d", Width: 70})
 	for _, ln := range strings.Split(b.String(), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(ln), "why:") || strings.HasPrefix(strings.TrimSpace(ln), "do:") {
+		if tr := strings.TrimSpace(ln); strings.HasPrefix(tr, "why ") || strings.HasPrefix(tr, "do ") {
 			if n := len([]rune(ln)); n > 70 {
 				t.Errorf("line exceeds width 70 (%d): %q", n, ln)
 			}
 		}
+	}
+}
+
+func TestPluralAndNum(t *testing.T) {
+	if Num(1234567) != "1,234,567" || Num(12) != "12" || Num(1000) != "1,000" {
+		t.Errorf("Num: %s %s %s", Num(1234567), Num(12), Num(1000))
+	}
+}
+
+func TestMaxLimitsFindingsAndSaysSo(t *testing.T) {
+	r := sample()
+	if len(r.Findings) < 2 {
+		t.Skip("sample produced fewer than 2 findings")
+	}
+	var b bytes.Buffer
+	Text(&b, r, Options{Window: "2d", Max: 1})
+	if !strings.Contains(b.String(), "smaller moves not shown") {
+		t.Errorf("expected a hidden-moves footer:\n%s", b.String())
+	}
+	b.Reset()
+	Text(&b, r, Options{Window: "2d"})
+	if strings.Contains(b.String(), "not shown") {
+		t.Error("no footer expected when everything is shown")
 	}
 }
