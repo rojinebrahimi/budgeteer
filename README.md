@@ -8,8 +8,6 @@ budgeteer reads the session logs your agents already write to disk, prices every
   <img src="docs/demo.gif" alt="budgeteer running summary and suggest on a sample workload" width="860">
 </p>
 
-<sub>The recording is the real binary run on anonymised, synthetic logs. `make demo` regenerates it, plus a square 1080×1080 cut for social posts (`docs/demo-linkedin.gif`).</sub>
-
 Plain-text version of the same report:
 
 ```text
