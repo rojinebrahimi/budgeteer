@@ -9,7 +9,7 @@
       "name": "budgeteer",
       "source": "./",
       "description": "Suggests the best moves to reduce Claude Code and Codex spend based on what you actually spent, with ranked, non-overlapping savings estimates.",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "category": "productivity",
       "keywords": ["cost", "budget", "tokens", "usage", "codex"],
       "homepage": "https://github.com/rojinebrahimi/budgeteer#readme",
